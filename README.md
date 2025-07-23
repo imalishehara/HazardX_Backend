@@ -1,1 +1,0 @@
-# Disaster_Management_Backend
