@@ -1,4 +1,4 @@
-﻿// Services/ContributionService.cs
+// Services/ContributionService.cs
 using Disaster_demo.Models;
 using Disaster_demo.Models.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -40,7 +40,31 @@ namespace Disaster_demo.Services
                 .ToListAsync();
         }
 
-      public async Task<List<VolunteerContributionDTO>> GetPendingContributionsAsync(string divisional_secretariat)
+
+
+
+
+
+        //public async Task<List<Contribution>> GetContributionsByAidIdAsync(int aidId)
+        //{
+        //    return await _dbContext.Contribution
+        //        .Where(c => c.aid_id == aidId)
+        //        .OrderByDescending(c => c.created_at)
+        //        .ToListAsync();
+        //}
+
+        //public async Task<bool> VerifyContributionAsync(int contributionId)
+        //{
+        //    var contribution = await _dbContext.Contribution.FindAsync(contributionId);
+        //    if (contribution == null) return false;
+
+        //    contribution.status = "Verified";
+        //    return await _dbContext.SaveChangesAsync() > 0;
+        //}
+
+
+
+        public async Task<List<VolunteerContributionDTO>> GetPendingContributionsAsync(string divisional_secretariat)
         {
             return await _dbContext.Contribution
                 .Where(c => c.status == "Pending")
@@ -110,6 +134,20 @@ namespace Disaster_demo.Services
                 .OrderByDescending(c => c.created_at)
                 .FirstOrDefaultAsync();
         }
+
+        public async Task<int> GetPendingContributionsCountAsync(string divisional_secretariat)
+        {
+            return await _dbContext.Contribution
+                .Where(c => c.status == "Pending")
+                .Join(
+                    _dbContext.AidRequests,
+                    c => c.aid_id,
+                    a => a.aid_id,
+                    (c, a) => new { Contribution = c, AidRequest = a }
+                )
+                .CountAsync(x => x.AidRequest.divisional_secretariat == divisional_secretariat);
+        }
+
     }
 
 }
