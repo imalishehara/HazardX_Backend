@@ -1,149 +1,198 @@
+using Disaster_demo.Models;
 using Disaster_demo.Models.Entities;
+using Microsoft.EntityFrameworkCore;
 using Disaster_demo.Services;
-using Microsoft.AspNetCore.Mvc;
 using System.Numerics;
 
-namespace Disaster_demo.Controllers
+namespace Disaster_demo.Services
 {
-    [ApiController]
-    [Route("[controller]")]
-    public class AidRequestController : ControllerBase
+    public class AidRequestServices : IAidRequestServices
     {
-        private readonly IAidRequestServices _aidrequestServices;
+        private readonly DisasterDBContext _dbContext;
 
-        public AidRequestController(IAidRequestServices aidRequestServices)
+        public AidRequestServices(DisasterDBContext dbContext)
         {
-            this._aidrequestServices = (AidRequestServices)aidRequestServices;
+            this._dbContext = dbContext;
         }
 
 
-        [HttpPost("create")]
-        public async Task<IActionResult> CreateAidRequest([FromBody] AidRequests request)
+
+
+        public async Task<List<AidRequests>> GetPendingPostDisasterAidRequestsAsync(string divisionalSecretariat)
         {
-            bool result = await _aidrequestServices.CreateAidRequestAsync(request);
-            if (!result)
+            divisionalSecretariat = divisionalSecretariat.Trim();
+
+            var pending = await _dbContext.AidRequests
+                .Where(s => s.dsApprove == DsApprovalStatus.Pending
+                            && s.request_type == AidRequestType.PostDisaster
+                            && s.divisional_secretariat == divisionalSecretariat)
+                .OrderByDescending(s => s.date_time)
+                .ToListAsync();
+
+            return pending;
+        }
+
+
+        public async Task<List<AidRequests>> GetPendingEmergencyAidRequestsAsync()
+        {
+            var pendingEmergency = await _dbContext.AidRequests
+                .Where(s => s.request_type == AidRequestType.Emergency)
+                .OrderByDescending(s => s.date_time)
+                .ToListAsync();
+
+            return pendingEmergency;
+        }
+
+
+
+
+
+
+
+        public async Task<bool> CreateAidRequestAsync(AidRequests request)
+        {
+            if (!Enum.IsDefined(typeof(AidRequestType), request.request_type))
             {
-                return BadRequest("Invalid request type.");
+                return false;  // Invalid enum value
             }
 
-            return Ok(new { message = "Aid request submitted!" });
+            request.date_time = DateTime.UtcNow;
+
+            _dbContext.AidRequests.Add(request);
+            await _dbContext.SaveChangesAsync();
+            return true;
         }
 
 
 
-        
-        [HttpGet("pending-post-disaster")]
-        public async Task<IActionResult> GetPendingPostDisasterAidRequests([FromQuery] string divisionalSecretariat)
+        public bool UpdateStatus(StatusUpdateModel model)
         {
-            if (string.IsNullOrWhiteSpace(divisionalSecretariat))
+            var aidRequest = _dbContext.AidRequests.FirstOrDefault(a => a.aid_id == model.ReportId);
+            if (aidRequest == null)
+                return false;
+
+            if (string.Equals(model.Actor, "DS", StringComparison.OrdinalIgnoreCase))
             {
-                return BadRequest("Divisional Secretariat is required.");
+                if (Enum.TryParse<DsApprovalStatus>(model.Status, true, out var parsedGnStatus))
+                {
+                    aidRequest.dsApprove = parsedGnStatus;
+                    _dbContext.SaveChanges();
+                    return true;
+                }
             }
 
-            var result = await _aidrequestServices.GetPendingPostDisasterAidRequestsAsync(divisionalSecretariat);
-            return Ok(result);
+
+            return false;
         }
 
-        [HttpGet("pending-emergency")]
-        public async Task<IActionResult> GetPendingEmergencyAidRequests()
+        public async Task<List<AidRequests>> GetDsApprovedAidRequests()
         {
-            var result = await _aidrequestServices.GetPendingEmergencyAidRequestsAsync();
-            return Ok(result);
-        }
+            var approvedRequests = await _dbContext.AidRequests
+                .Where(a => a.dsApprove == DsApprovalStatus.Approved)
+                .OrderByDescending(a => a.date_time)
+                .ToListAsync();
 
-
-
-
-        [HttpPost("updateStatus")]
-        public IActionResult UpdateGnStatus([FromBody] StatusUpdateModel model)
-        {
-            var success = _aidrequestServices.UpdateStatus(model);
-            if (!success)
-                return NotFound(new { message = "Aid request not found." });
-
-            return Ok(new { message = "Status updated successfully." });
-        }
-
-        [HttpGet("ds-approved")]
-        public async Task<IActionResult> GetDsApprovedAidRequests()
-        {
-            var result = await _aidrequestServices.GetDsApprovedAidRequests();
-            return Ok(result);
+            return approvedRequests;
         }
 
 
 
-       
-        [HttpGet("ongoing")]
-        public async Task<List<AidRequests>> GetOngoingAidRequests([FromQuery] string? divisionalSecretariat)
+        public async Task<List<AidRequests>> GetOngoingAidRequestsAsync(string? divisionalSecretariat = null)
         {
-            return await _aidrequestServices.GetOngoingAidRequestsAsync(divisionalSecretariat);
-        }
+            var query = _dbContext.AidRequests.AsQueryable();
 
-
-        [HttpPost("resolve/{aidId}")]
-        public async Task<IActionResult> MarkAidRequestAsResolved(int aidId)
-        {
-            var result = await _aidrequestServices.MarkAidRequestAsResolvedAsync(aidId);
-            if (!result)
-                return NotFound(new { message = "Aid request not found." });
-
-            return Ok(new { message = "Aid request marked as resolved!" });
-        }
-
-
-
-
-        [HttpGet("contribution-count/{aidId}")]
-        public async Task<IActionResult> GetContributionCount(int aidId)
-        {
-            var count = await _aidrequestServices.GetContributionCountAsync(aidId);
-            return Ok(new { aidId, contributionsReceived = count });
-        }
-
-
-        [HttpGet("delivered")]
-        public async Task<IActionResult> GetDeliveredAidRequests()
-        {
-            var delivered = await _aidrequestServices.GetDeliveredAidRequestsAsync();
-            return Ok(delivered);
-        }
-
-        [HttpGet("pending-post-disaster/count")]
-        public async Task<IActionResult> GetPendingPostDisasterAidRequestsCount([FromQuery] string divisionalSecretariat)
-        {
-            if (string.IsNullOrWhiteSpace(divisionalSecretariat))
+            if (!string.IsNullOrWhiteSpace(divisionalSecretariat))
             {
-                return BadRequest("Divisional Secretariat is required.");
+                divisionalSecretariat = divisionalSecretariat.Trim();
+                query = query.Where(a => a.divisional_secretariat == divisionalSecretariat);
             }
 
-            var count = await _aidrequestServices.GetPendingPostDisasterAidRequestsCountAsync(divisionalSecretariat);
-            return Ok(new { pendingCount = count });
+            return await query
+                .Where(a =>
+                    (a.request_type == AidRequestType.Emergency ||
+                     (a.request_type == AidRequestType.PostDisaster && a.dsApprove == DsApprovalStatus.Approved))
+                    && !a.IsFulfilled)
+                .OrderByDescending(a => a.date_time)
+                .ToListAsync();
         }
 
 
-       
-
-
-        [HttpGet("aids-for-district")]
-        public async Task<IActionResult> GetDsApprovedPostDisasterAndEmergencyByDistrict(
-        [FromQuery] string district,
-        [FromQuery] bool? isFulfilled = null)
+        public async Task<bool> MarkAidRequestAsResolvedAsync(int aidId)
         {
-            if (string.IsNullOrWhiteSpace(district))
+            var aidRequest = await _dbContext.AidRequests.FirstOrDefaultAsync(a => a.aid_id == aidId);
+            if (aidRequest == null) return false;
+
+            aidRequest.IsFulfilled = true;
+            await _dbContext.SaveChangesAsync();
+            return true;
+        }
+
+
+
+
+        public async Task<int> GetContributionCountAsync(int aidId)
+        {
+            return await _dbContext.Contribution
+                .Where(c => c.aid_id == aidId)
+                .CountAsync();
+        }
+
+        public async Task<List<AidRequests>> GetDeliveredAidRequestsAsync()
+        {
+            return await _dbContext.AidRequests
+                .Where(a => a.IsFulfilled == true)
+                .OrderByDescending(a => a.date_time)
+                .ToListAsync();
+        }
+
+        public async Task<int> GetPendingPostDisasterAidRequestsCountAsync(string divisionalSecretariat)
+        {
+            divisionalSecretariat = divisionalSecretariat.Trim();
+
+            return await _dbContext.AidRequests
+                .Where(s => s.dsApprove == DsApprovalStatus.Pending
+                            && s.request_type == AidRequestType.PostDisaster
+                            && s.divisional_secretariat == divisionalSecretariat)
+                .CountAsync();
+        }
+
+     
+
+
+        public async Task<(List<AidRequests> dsApprovedPostDisaster, List<AidRequests> emergency)>
+    GetDsApprovedPostDisasterAndEmergencyAidRequestsByDistrictAsync(string district, bool? isFulfilled = null)
+        {
+            district = district.Trim();
+
+            var dsQuery = _dbContext.AidRequests
+                .Where(a =>
+                    a.dsApprove == DsApprovalStatus.Approved &&
+                    a.request_type == AidRequestType.PostDisaster &&
+                    a.district == district);
+
+            var emergencyQuery = _dbContext.AidRequests
+                .Where(a =>
+                    a.request_type == AidRequestType.Emergency &&
+                    a.district == district);
+
+            // Apply filter if isFulfilled parameter is provided
+            if (isFulfilled.HasValue)
             {
-                return BadRequest("District is required.");
+                dsQuery = dsQuery.Where(a => a.IsFulfilled == isFulfilled.Value);
+                emergencyQuery = emergencyQuery.Where(a => a.IsFulfilled == isFulfilled.Value);
             }
 
-            var (dsApprovedPostDisaster, emergency) =
-                await _aidrequestServices.GetDsApprovedPostDisasterAndEmergencyAidRequestsByDistrictAsync(district, isFulfilled);
+            var dsApprovedPostDisaster = await dsQuery
+                .OrderByDescending(a => a.date_time)
+                .ToListAsync();
 
-            return Ok(new
-            {
-                dsApprovedPostDisaster,
-                emergency
-            });
+            var emergency = await emergencyQuery
+                .OrderByDescending(a => a.date_time)
+                .ToListAsync();
+
+            return (dsApprovedPostDisaster, emergency);
         }
+
 
 
 
