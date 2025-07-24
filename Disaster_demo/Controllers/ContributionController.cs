@@ -1,4 +1,4 @@
-﻿using Disaster_demo.Models.Entities;
+using Disaster_demo.Models.Entities;
 using Disaster_demo.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -81,6 +81,14 @@ namespace Disaster_demo.Controllers
                 return NotFound("No contributions found.");
             return Ok(latest);
         }
+
+        [HttpGet("pending/count")]
+        public async Task<IActionResult> GetPendingContributionsCount([FromQuery] string divisional_secretariat)
+        {
+            var count = await _contributionService.GetPendingContributionsCountAsync(divisional_secretariat);
+            return Ok(new { pendingCount = count });
+        }
+
 
     }
 }
