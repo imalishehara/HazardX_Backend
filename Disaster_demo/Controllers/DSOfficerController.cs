@@ -1,4 +1,4 @@
-﻿using Disaster_demo.Services;
+using Disaster_demo.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Disaster_demo.Controllers
@@ -23,6 +23,13 @@ namespace Disaster_demo.Controllers
                 return NotFound();
 
             return Ok(officerDetails);
+        }
+
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAllDsOfficers()
+        {
+            var officers = await _dsofficerServices.GetAllDsOfficersAsync();
+            return Ok(officers);
         }
     }
 }
