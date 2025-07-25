@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Disaster_demo.Models.Entities
@@ -28,6 +28,8 @@ namespace Disaster_demo.Models.Entities
         public string action { get; set; } = "Pending";
         public double Latitude { get; set; }  
         public double Longitude { get; set; }
+
+        public string nic_number { get; set; }
     }
 }
 
