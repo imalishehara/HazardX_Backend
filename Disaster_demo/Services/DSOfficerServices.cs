@@ -1,4 +1,4 @@
-﻿using Disaster_demo.Models;
+using Disaster_demo.Models;
 using Disaster_demo.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +33,11 @@ namespace Disaster_demo.Services
                 Role = "DS Officer",
                 Message = "DS Officer details fetched successfully"
             };
+        }
+
+        public async Task<List<DS_Officer>> GetAllDsOfficersAsync()
+        {
+            return await _dbContext.DS_Officers.ToListAsync();
         }
 
 
